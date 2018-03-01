@@ -4,18 +4,18 @@ try:
     import tensorrt
     from tensorrt.parsers import caffeparser
 except ImportError as err:
-    sys.stderr.write("""ERROR: failed to import module ({}) 
-Please make sure you have the TensorRT Library installed 
+    sys.stderr.write("""ERROR: failed to import module ({})
+Please make sure you have the TensorRT Library installed
 and accessible in your LD_LIBRARY_PATH
 """.format(err))
-    exit(1) 
+    exit(1)
 
 try:
     from PIL import Image
     import argparse
 except ImportError as err:
-    sys.stderr.write("""ERROR: failed to import module ({}) 
-Please make sure you have pycuda and the example dependencies installed. 
+    sys.stderr.write("""ERROR: failed to import module ({})
+Please make sure you have pycuda and the example dependencies installed.
 https://wiki.tiker.net/PyCuda/Installation/Linux
 pip(3) install tensorrt[examples]
 """.format(err))
@@ -32,7 +32,7 @@ ARGS = PARSER.parse_args()
 DATA_DIR = ARGS.datadir
 
 
-#Get the mean image from the caffe binaryproto file 
+#Get the mean image from the caffe binaryproto file
 parser = caffeparser.create_caffe_parser()
 mean_blob = parser.parse_binary_proto(DATA_DIR + "/mnist/mnist_mean.binaryproto")
 # parser.destroy()
@@ -44,7 +44,7 @@ def sub_mean(img):
     Will be registered in the Lite Engine preprocessor table
     to be applied to each input case
     '''
-    img = img.ravel()    
+    img = img.ravel()
     data = np.empty(len(img))
     for i in range(len(img)):
         data[i] = np.float32((img[i]) - MEAN[i])
@@ -52,7 +52,7 @@ def sub_mean(img):
 
 #Lamba to apply argmax to each result after inference to get prediction
 argmax = lambda res: np.argmax(res.reshape(10))
-                               
+
 def generate_cases(dataset, number):
     '''
     Generate a list of data to process and answers to compare to
@@ -68,24 +68,22 @@ def generate_cases(dataset, number):
     return cases[:number], labels[:number]
 
 def main():
-    #Generate cases 
+    #Generate cases
     train_data, train_target = generate_cases('training', 50000)
     test_data, test_target = generate_cases('testing', 10000)
     #Calibrator
     batchstream = ImageBatchStream(100, train_data, sub_mean)
     int8_calibrator = PythonEntropyCalibrator(["data"], batchstream)
 
-    mnist_engine = tensorrt.lite.Engine(framework="c1",                              #Source framework 
-                                    deployfile=DATA_DIR + "/mnist/mnist.prototxt",   #Deploy file 
+    mnist_engine = tensorrt.lite.Engine(framework="c1",                              #Source framework
+                                    deployfile=DATA_DIR + "/mnist/mnist.prototxt",   #Deploy file
                                     modelfile=DATA_DIR + "/mnist/mnist.caffemodel",  #Model File
                                     max_batch_size=100,                              #Max number of images to be processed at a time
                                     input_nodes={"data":(1,28,28)},                  #Input layers
                                     output_nodes=["prob"],                           #Ouput layers
                                     preprocessors={"data":sub_mean},                 #Preprocessing functions
                                     postprocessors={"prob":argmax},                  #Postprocesssing functions
-                                    #calibrator = int8_calibrator,
-                                    #data_type=tensorrt.infer.DataType.INT8)
-                                    data_type=tensorrt.infer.DataType.FLOAT)
+                                    data_type=tensorrt.infer.DataType.HALF)
     # infer
     test_data = np.array(test_data, dtype=np.float32)
     test_target = np.array(test_target, dtype=np.int)
@@ -96,6 +94,6 @@ def main():
         #Validate results
         correct = np.sum(batch_target == results).astype(np.float32)
         print("Batch [{}] Inference: {:.2f}% Correct".format(i / 100 + 1, (correct / len(batch_target)) * 100))
-    
+
 if __name__ == "__main__":
     main()
